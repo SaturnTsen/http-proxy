@@ -1,0 +1,14 @@
+{
+  "dependencies": {
+    "http-proxy": "^1.18.1"
+  },
+  "scripts": {
+    "start": "node src/proxy.js",
+    "disconnect": "node -e \"require('./src/utils').disconnectVPN().then(console.log).catch(console.error)\"",
+    "clear": "node src/clear.js"
+  },
+  "author": {
+    "name": "Saturn Tsen",
+    "license": "MIT"
+  }
+}
