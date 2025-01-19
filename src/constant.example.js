@@ -7,6 +7,7 @@ const CONFIG = {
   VPN_NAME: 'YOUR_VPN_CONNECTION_NAME', // For Windows: VPN 连接名称
   VPN_COMMAND: 'sudo openvpn --config /path/to/your/vpn/config.ovpn', // For Linux: VPN 连接命令
   DISCONNECT_VPN_COMMAND: 'sudo pkill openvpn', // For Linux: 断开 VPN 连接命令
+  SOCKET_TIMEOUT: 100000, // Socket 超时时间
 };
 
 module.exports = CONFIG;

@@ -50,7 +50,8 @@ function testDisconnectVPN() {
 function runTests() {
   testCheckVPNConnection();
   testConnectVPN();
-  // testDisconnectVPN();
+  console.log('Test OK, now disconnecting VPN...');
+  testDisconnectVPN();
 }
 
 runTests();

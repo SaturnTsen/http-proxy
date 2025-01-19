@@ -1,6 +1,5 @@
 const http = require('http');
 const net = require('net');
-const url = require('url');
 const httpProxy = require('http-proxy');
 const CONFIG = require('./constant');
 const { ensureVPNConnection, disconnectVPN, log, logInfo } = require('./utils'); // 引入 VPN 连接检查函数
@@ -11,6 +10,7 @@ const args = process.argv.slice(2);
 const isAllowedSource = (ip) => ip.startsWith(CONFIG.ALLOWED_SUBNET); // 检查请求来源是否属于允许的网段
 const getClientIp = (req) => req.socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
 const getClientIpConnect = (clientSocket) => clientSocket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
+// eslint-disable-next-line no-unused-vars
 const isValidUrl = (target) => { try { new URL(target); return true; } catch (err) { return false; } };
 
 // 核心逻辑
@@ -71,7 +71,7 @@ const handleHttpsRequest = (req, clientSocket, head) => {
 
   // 设置超时和错误处理
   handleSocketErrors(serverSocket, clientSocket);
-  serverSocket.setTimeout(10000, () => {
+  serverSocket.setTimeout(CONFIG.SOCKET_TIMEOUT, () => {
     log('Connection to server timed out.');
     clientSocket.end();
   });

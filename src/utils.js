@@ -8,7 +8,7 @@ const log = (message) => {
 };
 
 const logInfo = (message) => {
-    console.log(`[Info] ${message}`);
+  console.log(`[Info] ${message}`);
 };
 
 // 检查 VPN 连接状态，如果未连接则自动连接
@@ -25,6 +25,7 @@ const ensureVPNConnection = async () => {
 
 // 检查系统是否连接了 VPN
 const checkVPNConnection = () => {
+  // eslint-disable-next-line no-unused-vars
   return new Promise((resolve, reject) => {
     let command;
     if (process.platform === 'win32') {

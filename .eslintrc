@@ -1,0 +1,16 @@
+{
+  "env": {
+    "node": true,  // 设置 Node.js 环境
+    "es2021": true // 使用 ECMAScript 2021 语法
+  },
+  "extends": [
+    "eslint:recommended" // 使用 ESLint 推荐的规则集
+  ],
+  "rules": {
+    "indent": ["error", 2],  // 强制使用 2 空格缩进
+    "semi": ["error", "always"],  // 强制使用分号
+    "quotes": ["error", "single"],  // 强制使用单引号
+    "brace-style": ["error", "1tbs"],  // 强制采用 1tbs（same-line）风格的花括号
+    "no-console": "off"  // 允许使用 console.log
+  }
+}
