@@ -2,6 +2,27 @@
 const child_process = require('child_process');
 const CONFIG = require('./constant');
 
+// 创建统一的日志函数
+const log = (message) => {
+  console.log(`[Proxy] ${message}`);
+};
+
+const logInfo = (message) => {
+    console.log(`[Info] ${message}`);
+};
+
+// 检查 VPN 连接状态，如果未连接则自动连接
+const ensureVPNConnection = async () => {
+  const vpnStatus = await checkVPNConnection();
+  if (vpnStatus === 'VPN is not connected.') {
+    log(`Attempting to connect to VPN: ${CONFIG.VPN_NAME}...`);
+    await connectVPN();
+    log(`VPN ${CONFIG.VPN_NAME} is now connected!`);
+  } else {
+    log('VPN is already connected.');
+  }
+};
+
 // 检查系统是否连接了 VPN
 const checkVPNConnection = () => {
   return new Promise((resolve, reject) => {
@@ -78,4 +99,4 @@ const disconnectVPN = () => {
   });
 };
 
-module.exports = { checkVPNConnection, connectVPN, disconnectVPN };
+module.exports = { ensureVPNConnection, disconnectVPN, log, logInfo };
