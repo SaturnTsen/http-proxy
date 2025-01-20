@@ -92,6 +92,14 @@ If you want the VPN to automatically disconnect when you stop the proxy server
 npm start -- --auto-disconnect
 ```
 
+#### Disable Verbose Mode
+
+If you want to disable verbose logging for the proxy server, you can add the `--disable-verbose` flag when starting the server.
+
+```bash
+npm start -- --disable-verbose
+```
+
 #### Disconnect VPN
 
 If you only want to disconnect the VPN without starting the proxy server, you

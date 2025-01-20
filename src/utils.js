@@ -3,23 +3,64 @@ const child_process = require('child_process');
 const CONFIG = require('./constant');
 
 // 创建统一的日志函数
-const log = (message) => {
-  console.log(`[Proxy] ${message}`);
+const log = (message, level = 'info') => {
+  const timestamp = new Date().toISOString().split('.')[0]; // 精确到秒
+  if (level === 'proxy') {
+    console.log(`[${timestamp}] [Proxy] ${message}`);
+  } else if (level === 'info') {
+    if (CONFIG.VERBOSE) {
+      console.log(`[${timestamp}] [Info] ${message}`);
+    }
+  } else if (level === 'warning') {
+    if (CONFIG.VERBOSE) {
+      console.warn(`[${timestamp}] [Warning] ${message}`);
+    }
+  } else if (level === 'error') {
+    console.error(`[${timestamp}] [Error] ${message}`);
+  }
 };
 
-const logInfo = (message) => {
-  console.log(`[Info] ${message}`);
+/**
+ * Checks if the given IP address is within the allowed subnet.
+ *
+ * @param {string} ip - The IP address to check.
+ * @returns {boolean} - Returns true if the IP address is within the allowed subnet, otherwise false.
+ *
+ * @example
+ * // Assuming CONFIG.ALLOWED_SUBNET is '192.168.1.0/24'
+ * isAllowedSource('192.168.1.5'); // true
+ * isAllowedSource('192.168.2.5'); // false
+ *
+ * @typedef {Object} CONFIG
+ * @property {string} ALLOWED_SUBNET - The allowed subnet in CIDR notation (e.g., '192.168.1.0/24').
+ */
+const ipToInt = (ip) => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
+const isValidIP = (ip) => /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every(octet => parseInt(octet) <= 255);
+const isAllowedSource = (ip) => {
+  const [subnetBase, subnetMask] = CONFIG.ALLOWED_SUBNET.split('/');
+  const subnetMaskInt = parseInt(subnetMask, 10);
+  // 校验 IP 地址有效性
+  if (!isValidIP(ip) || !isValidIP(subnetBase)) {
+    throw new Error('Invalid IP address or subnet.');
+  }
+  // 将 IP 转换为 32 位整数
+  const ipInt = ipToInt(ip);
+  const subnetBaseInt = ipToInt(subnetBase);
+  const mask = ~((1 << (32 - subnetMaskInt)) - 1);  // 生成子网掩码
+  return (ipInt & mask) === (subnetBaseInt & mask);
 };
+
 
 // 检查 VPN 连接状态，如果未连接则自动连接
 const ensureVPNConnection = async () => {
+  log('Checking VPN connection status...', 'proxy');
   const vpnStatus = await checkVPNConnection();
   if (vpnStatus === 'VPN is not connected.') {
-    log(`Attempting to connect to VPN: ${CONFIG.VPN_NAME}...`);
+    log(`Attempting to connect to VPN: ${CONFIG.VPN_NAME}...`, 'proxy');
     await connectVPN();
-    log(`VPN ${CONFIG.VPN_NAME} is now connected!`);
+    log(`VPN ${CONFIG.VPN_NAME} is now connected!`, 'proxy');
   } else {
-    log('VPN is already connected.');
+    log('VPN is already connected.', 'proxy');
   }
 };
 
@@ -100,4 +141,4 @@ const disconnectVPN = () => {
   });
 };
 
-module.exports = { ensureVPNConnection, disconnectVPN, log, logInfo };
+module.exports = { ensureVPNConnection, disconnectVPN, isAllowedSource, log };
