@@ -1,8 +1,8 @@
 #!/bin/bash
-echo "Starting the proxy server..."
+# This script should be run from the root of the project instead of the exec
+# folder
 
-# Change to the project root directory
-cd "$(dirname "$0")/.."
+echo "Starting the proxy server..."
 
 # Run the proxy.js script using npm
 npm run start "$@"
