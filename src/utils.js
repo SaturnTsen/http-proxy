@@ -21,6 +21,8 @@ const log = (message, level = 'info') => {
   }
 };
 
+
+// URL parser
 const ipToInt = (ip) => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
 const isValidIP = (ip) => /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every(octet => parseInt(octet) <= 255);
 const isAllowedSource = (ip) => {
@@ -70,6 +72,27 @@ const parseRequestUrl = (requestUrl) => {
 
   return { hostname, port };
 };
+
+const isValidUrl = (hostname, port) => {
+  if (!hostname) return false;
+  // Handle IPv6
+  if (hostname.includes(':')) {
+    if (!isIPv6(hostname.replace(/[\[\]]/g, ''))) return false;
+  }
+  // Validate port if provided
+  if (port) {
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) return false;
+  }
+  return true;
+};
+
+const getSocketIp = (socket) => {
+  if (!socket || !socket.remoteAddress) return '';
+  return socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
+};
+
+// VPN Connection
 
 const checkVPNConnection = () => {
   return new Promise((resolve) => {
@@ -134,4 +157,4 @@ const disconnectVPN = () => {
   });
 };
 
-export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, log };
+export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, isValidUrl, getSocketIp, log };

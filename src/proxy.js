@@ -3,19 +3,9 @@ import http from 'http';
 import net from 'net';
 import httpProxy from 'http-proxy';
 import CONFIG from './constant.js';
-import { ensureVPNConnection, disconnectVPN, parseRequestUrl, log, isAllowedSource } from './utils.js';
+import { ensureVPNConnection, disconnectVPN, parseRequestUrl, log, isValidUrl, getSocketIp, isAllowedSource } from './utils.js';
 
 const args = process.argv.slice(2);
-
-// Util functions
-const isValidUrl = (target) => URL.canParse(target);
-const getSocketIp = (socket) => {
-  if (!socket || !socket.remoteAddress) {
-    log('Undefined Socket', 'warning');
-    return 'Unknown IP'; // 或者返回一个默认的值
-  }
-  return socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
-};
 
 // 核心逻辑
 const main = async (autoDisconnectVPNOnSignal) => {
@@ -68,36 +58,39 @@ const main = async (autoDisconnectVPNOnSignal) => {
 // 处理 HTTP 请求
 const proxy = httpProxy.createProxyServer({});
 const handleHttpRequest = (req, res) => {
+  // 过滤不在允许范围内的请求
   const clientIp = getSocketIp(req.socket);
   if (!isAllowedSource(clientIp)) {
     return sendForbiddenResponse(res, clientIp);
   }
   log(`New HTTP request from ${clientIp} to ${req.url}`);
-  const targetUrl = parseRequestUrl(req.url);
-  const target = `${targetUrl.protocol}//${targetUrl.hostname}:${targetUrl.port || 80}`;
-  if (!isValidUrl(target)) {
-    log(`Invalid target URL: ${target}`);
-    return sendBadRequestResponse(res, target);
+  // 解析请求 URL
+  if (URL.canParse(req.url)) {
+    const target = new URL(req.url);
+    // 代理请求
+    proxy.web(req, res, { target, changeOrigin: true }, (err) => {
+      log(`HTTP Proxy Error: ${err.message}`);
+      sendBadGatewayResponse(res, target);
+    });
   }
-  proxy.web(req, res, { target, changeOrigin: true }, (err) => {
-    log(`HTTP Proxy Error: ${err.message}`);
-    sendBadGatewayResponse(res, target);
-  });
 };
 
-// 处理 HTTPS 请求的 CONNECT 隧道
+// 处理 HTTPS 请求
 const handleHttpsRequest = (req, clientSocket, head) => {
+  // 过滤不在允许范围内的请求
   const clientIp = getSocketIp(clientSocket);
-  log(`New HTTPS request from ${clientIp} to ${req.url}`);
-
   if (!isAllowedSource(clientIp)) {
     return sendForbiddenResponseToClientSocket(clientSocket);
   }
-
-  // 连接到目标服务器
+  log(`New HTTPS request from ${clientIp} to ${req.url}`);
+  // 解析请求 URL
   const { hostname, port } = parseRequestUrl(req.url);
+  if (!isValidUrl(hostname, port || 443)) {
+    log(`Invalid target URL - hostname: ${hostname}, port:${port || 443}`);
+    return sendBadRequestResponseToClientSocket(clientSocket);
+  }
+  // 连接到目标服务器
   const serverSocket = connectToServer(hostname, port, clientSocket, head);
-
   // 设置超时和错误处理
   handleSocketErrors(serverSocket, clientSocket);
   serverSocket.setTimeout(CONFIG.SOCKET_TIMEOUT, () => {
@@ -106,7 +99,6 @@ const handleHttpsRequest = (req, clientSocket, head) => {
   });
 };
 
-// 连接到目标服务器
 const connectToServer = (hostname, port, clientSocket, head) => {
   const serverSocket = net.connect(port || 443, hostname, () => {
     clientSocket.write(
@@ -115,7 +107,6 @@ const connectToServer = (hostname, port, clientSocket, head) => {
       '\r\n'
     );
     serverSocket.write(head);
-
     // 双向数据转发
     serverSocket.pipe(clientSocket);
     clientSocket.pipe(serverSocket);
@@ -161,16 +152,19 @@ const sendForbiddenResponseToClientSocket = (clientSocket) => {
   log(`Blocked request from ${getSocketIp(clientSocket)}`, 'warning');
 };
 
+const sendBadRequestResponseToClientSocket = (clientSocket) => {
+  clientSocket.write(
+    'HTTP/1.1 400 Bad Request\r\n' +
+    'Content-Type: text/plain\r\n' +
+    '\r\n400 Bad Request: Invalid target URL'
+  );
+  clientSocket.destroy();
+}
+
 const sendForbiddenResponse = (res, clientIp) => {
   res.writeHead(403, { 'Content-Type': 'text/plain' });
   res.end('403 Forbidden: Access is restricted to allowed subnet');
   log(`Blocked request from ${clientIp}`, 'warning');
-};
-
-const sendBadRequestResponse = (res, target) => {
-  res.writeHead(400, { 'Content-Type': 'text/plain' });
-  res.end(`400 Bad Request: Invalid target URL - ${target}`);
-  log(`Bad request: ${target}`, 'warning');
 };
 
 const sendBadGatewayResponse = (res, target) => {
