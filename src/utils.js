@@ -1,5 +1,5 @@
 // utils.js
-import { exec } from 'child_process';
+import child_process from 'child_process';
 import { isIPv6 } from 'net';
 import CONFIG from './constant.js';
 
@@ -7,9 +7,7 @@ import CONFIG from './constant.js';
 const log = (message, level = 'info') => {
   const timestamp = new Date().toISOString().split('.')[0]; // 精确到秒
   if (level === 'proxy') {
-    if (CONFIG.VERBOSE) {
-      console.log(`[${timestamp}] [Proxy] ${message}`);
-    }
+    console.log(`[${timestamp}] [Proxy] ${message}`);
   } else if (level === 'info') {
     if (CONFIG.VERBOSE) {
       console.log(`[${timestamp}] [Info] ${message}`);
@@ -18,9 +16,15 @@ const log = (message, level = 'info') => {
     console.warn(`[${timestamp}] [Warning] ${message}`);
   } else if (level === 'error') {
     console.error(`[${timestamp}] [Error] ${message}`);
+  } else if (level === 'debug') {
+    if (CONFIG.DEBUG) {
+      console.debug(`[${timestamp}] [Debug] ${message}`);
+    }
   }
 };
 
+
+// URL parser
 const ipToInt = (ip) => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
 const isValidIP = (ip) => /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every(octet => parseInt(octet) <= 255);
 const isAllowedSource = (ip) => {
@@ -71,6 +75,27 @@ const parseRequestUrl = (requestUrl) => {
   return { hostname, port };
 };
 
+const isValidUrl = (hostname, port) => {
+  if (!hostname) return false;
+  // Handle IPv6
+  if (hostname.includes(':')) {
+    if (!isIPv6(hostname.replace(/[[]]/g, ''))) return false;
+  }
+  // Validate port if provided
+  if (port) {
+    const portNum = parseInt(port, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) return false;
+  }
+  return true;
+};
+
+const getSocketIp = (socket) => {
+  if (!socket || !socket.remoteAddress) return '';
+  return socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
+};
+
+// VPN Connection
+
 const checkVPNConnection = () => {
   return new Promise((resolve) => {
     let command;
@@ -80,7 +105,7 @@ const checkVPNConnection = () => {
       command = 'ifconfig | grep tun0';
     }
 
-    exec(command, (error, stdout, stderr) => {
+    child_process.exec(command, (error, stdout, stderr) => {
       if (process.platform === 'win32') {
         resolve(stdout.startsWith('No connections') ? 'VPN is not connected.' : 'VPN is connected.');
       } else {
@@ -90,13 +115,20 @@ const checkVPNConnection = () => {
   });
 };
 
+
+// 自动连接 VPN
 const connectVPN = () => {
   return new Promise((resolve, reject) => {
-    const command = process.platform === 'win32'
-      ? `rasdial ${CONFIG.VPN_NAME}`
-      : CONFIG.VPN_COMMAND;
+    let command;
+    if (process.platform === 'win32') {
+      // Windows: 使用 rasdial 连接 VPN
+      command = `rasdial ${CONFIG.VPN_NAME}`;
+    } else if (process.platform === 'linux') {
+      // Linux: 使用系统命令连接 VPN
+      command = CONFIG.VPN_COMMAND;
+    }
 
-    exec(command, (error, stderr) => {
+    child_process.exec(command, (error, stdout, stderr) => {
       if (error || stderr) {
         reject('Failed to connect VPN.');
       } else {
@@ -106,25 +138,33 @@ const connectVPN = () => {
   });
 };
 
+
 const ensureVPNConnection = async () => {
-  log('Checking VPN connection status...', 'proxy');
+  log('Checking VPN connection status...', 'debug');
   const vpnStatus = await checkVPNConnection();
   if (vpnStatus === 'VPN is not connected.') {
+    log(`VPN ${CONFIG.VPN_NAME} is not connected.`, 'warning');
     log(`Attempting to connect to VPN: ${CONFIG.VPN_NAME}...`, 'proxy');
     await connectVPN();
     log(`VPN ${CONFIG.VPN_NAME} is now connected!`, 'proxy');
   } else {
-    log('VPN is already connected.', 'proxy');
+    log('VPN is already connected.', 'debug');
   }
 };
 
+// 断开 VPN 连接
 const disconnectVPN = () => {
   return new Promise((resolve, reject) => {
-    const command = process.platform === 'win32'
-      ? `rasdial "${CONFIG.VPN_NAME}" /disconnect`
-      : CONFIG.DISCONNECT_VPN_COMMAND;
+    let command;
+    if (process.platform === 'win32') {
+      // Windows: 使用 rasdial /disconnect 命令断开 VPN
+      command = `rasdial "${CONFIG.VPN_NAME}" /disconnect`; // 使用从 constant.js 引入的 VPN 名称
+    } else if (process.platform === 'linux') {
+      // Linux:
+      command = CONFIG.DISCONNECT_VPN_COMMAND;
+    }
 
-    exec(command, (error, stderr) => {
+    child_process.exec(command, (error, stdout, stderr) => {
       if (error || stderr) {
         reject('Failed to disconnect VPN.');
       } else {
@@ -134,4 +174,4 @@ const disconnectVPN = () => {
   });
 };
 
-export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, log };
+export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, isValidUrl, getSocketIp, log };

@@ -10,6 +10,7 @@ const CONFIG = {
   SOCKET_TIMEOUT: 10000, // Socket 超时时间
   RESTART_TIMEOUT: 5000,
   VPN_CHECK_INTERVAL: 20000,
+  DEBUG: false, // 是否开启调试模式
 };
 
 export default CONFIG;
