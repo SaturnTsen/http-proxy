@@ -12,4 +12,4 @@ const CONFIG = {
   VPN_CHECK_INTERVAL: 20000,
 };
 
-module.exports = CONFIG;
+export default CONFIG;

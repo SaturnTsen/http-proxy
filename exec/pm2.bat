@@ -6,6 +6,6 @@ echo Starting the proxy server...
 
 :: This script should be run from the root of the project instead of the exec
 :: folder
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 
 pause

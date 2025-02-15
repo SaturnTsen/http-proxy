@@ -1,6 +1,5 @@
-// test.js
-const assert = require('assert');
-const { checkVPNConnection, connectVPN, disconnectVPN } = require('./utils');
+import assert from 'assert';
+import { checkVPNConnection, connectVPN, disconnectVPN } from './utils.js';
 
 // 测试 checkVPNConnection 函数
 function testCheckVPNConnection() {

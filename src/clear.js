@@ -1,13 +1,12 @@
-// clear.js
-const os = require('os');
-const { exec } = require('child_process');
+import os from 'os';
+import { exec } from 'child_process';
 
 const isWindows = os.platform() === 'win32';
 
 const killNodeProcesses = () => {
   const command = isWindows
     ? 'taskkill /F /IM node.exe'
-    : 'pkill node';  // Linux 使用 pkill 命令
+    : 'pkill node'; // Linux 使用 pkill 命令
 
   exec(command, (error, stdout, stderr) => {
     if (error) {

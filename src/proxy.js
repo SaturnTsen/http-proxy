@@ -1,33 +1,49 @@
-const http = require('http');
-const net = require('net');
-const httpProxy = require('http-proxy');
-const CONFIG = require('./constant');
-const { ensureVPNConnection, disconnectVPN, log, isAllowedSource } = require('./utils'); // 引入 VPN 连接检查函数
+// proxy.js
+import http from 'http';
+import net from 'net';
+import httpProxy from 'http-proxy';
+import CONFIG from './constant.js';
+import { ensureVPNConnection, disconnectVPN, parseRequestUrl, log, isAllowedSource } from './utils.js';
 
 const args = process.argv.slice(2);
 
 // Util functions
 const isValidUrl = (target) => URL.canParse(target);
-const getSocketIp = (socket) => socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
+const getSocketIp = (socket) => {
+  if (!socket || !socket.remoteAddress) {
+    log('Undefined Socket', 'warning');
+    return 'Unknown IP'; // 或者返回一个默认的值
+  }
+  return socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
+};
 
 // 核心逻辑
 const main = async (autoDisconnectVPNOnSignal) => {
-
   // Proxy server daemon
   const setupProxyServer = async () => {
     try {
       // 连接 VPN
       await ensureVPNConnection();
-      // 创建 HTTP 服务器
+
+      // 启动代理服务器
       const server = http.createServer(handleHttpRequest);
       server.on('connect', handleHttpsRequest);
-      // 启动代理服务器
       server.listen(CONFIG.PROXY_PORT, CONFIG.LISTEN_ADDRESS, () => {
         log(`Proxy server listening on http://${CONFIG.LISTEN_ADDRESS}:${CONFIG.PROXY_PORT}`, 'proxy');
         log(`Allowed subnet: ${CONFIG.ALLOWED_SUBNET}`, 'proxy');
       });
+
+      // 如果传入了 --auto-disconnect 参数，监听 SIGABRT 信号并自动断开 VPN
       if (autoDisconnectVPNOnSignal) {
-        handleVPNDisconnectOnSignal();
+        process.on('SIGINT', async () => {
+          log('Received SIGINT, disconnecting VPN...', 'proxy');
+          try {
+            await disconnectVPN();
+            log(`VPN ${CONFIG.VPN_NAME} is disconnected.`, 'proxy');
+          } catch (error) {
+            log('Failed to disconnect VPN:', error.message, 'error');
+          }
+        });
       }
     } catch (error) {
       log(error.message, 'error');
@@ -57,7 +73,7 @@ const handleHttpRequest = (req, res) => {
     return sendForbiddenResponse(res, clientIp);
   }
   log(`New HTTP request from ${clientIp} to ${req.url}`);
-  const targetUrl = new URL(req.url, `http://${req.headers.host}`);
+  const targetUrl = parseRequestUrl(req.url);
   const target = `${targetUrl.protocol}//${targetUrl.hostname}:${targetUrl.port || 80}`;
   if (!isValidUrl(target)) {
     log(`Invalid target URL: ${target}`);
@@ -79,7 +95,7 @@ const handleHttpsRequest = (req, clientSocket, head) => {
   }
 
   // 连接到目标服务器
-  const { hostname, port } = new URL(`http://${req.url}`);
+  const { hostname, port } = parseRequestUrl(req.url);
   const serverSocket = connectToServer(hostname, port, clientSocket, head);
 
   // 设置超时和错误处理
@@ -113,18 +129,24 @@ const handleSocketErrors = (serverSocket, clientSocket) => {
   serverSocket.on('error', (err) => {
     if (err.code === 'ECONNABORTED') {
       log(`Connection aborted by server ${getSocketIp(serverSocket)}`, 'info');
+    } else if (err.code === 'ETIMEDOUT') {
+      log(`Connection to server ${getSocketIp(serverSocket)} timed out.`, 'info');
+    } else if (err.code === 'ECONNRESET') {
+      log(`Connection reset by server ${getSocketIp(serverSocket)}`, 'info');
+    } else if (err.code === 'ENETUNREACH') {
+      log(`Network is unreachable to server ${getSocketIp(serverSocket)}`, 'warning');
     } else {
-      log(`HTTPS proxy error: ${err.message}`, 'warning');
+      log(`Server socket error: ${err.message}`, 'warning');
     }
     clientSocket.end();
   });
-
   // 捕获错误，防止崩溃
   clientSocket.on('error', (err) => {
-    log(`Client socket error: ${err.message}`, 'warning');
-  });
-  serverSocket.on('error', (err) => {
-    log(`Server socket error: ${err.message}`, 'warning');
+    if (err.code === 'ECONNRESET') {
+      log(`Connection reset by client ${getSocketIp(clientSocket)}`, 'info');
+    } else {
+      log(`Client socket error: ${err}`, 'warning');
+    }
   });
 };
 
@@ -156,21 +178,6 @@ const sendBadGatewayResponse = (res, target) => {
   res.end('Bad Gateway');
   log(`Bad gateway: ${target}`, 'warning');
 };
-
-// Auto disconnect VPN
-const handleVPNDisconnectOnSignal = () => {
-  // 如果传入了 --auto-disconnect 参数，监听 SIGABRT 信号并自动断开 VPN
-  process.on('SIGINT', async () => {
-    log('Received SIGINT, disconnecting VPN...', 'proxy');
-    try {
-      await disconnectVPN();
-      log(`VPN ${CONFIG.VPN_NAME} is disconnected.`, 'proxy');
-    } catch (error) {
-      log('Failed to disconnect VPN:', error.message, 'error');
-    }
-  });
-};
-
 
 // 启动代理服务器
 
