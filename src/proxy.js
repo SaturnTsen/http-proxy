@@ -2,49 +2,11 @@
 import http from 'http';
 import net from 'net';
 import httpProxy from 'http-proxy';
-import CONFIG from './constant.js';
+import { CONFIG } from './constant.js';
 import { ensureVPNConnection, disconnectVPN, parseRequestUrl, log, isValidUrl, getSocketIp, isAllowedSource } from './utils.js';
+import { sendForbiddenResponseToClientSocket, sendBadRequestResponseToClientSocket, sendForbiddenResponse, sendBadGatewayResponse, sendBadRequestResponse } from './error-handlers.js';
 
 const proxy = httpProxy.createProxyServer({});
-
-// Https error handlers
-const sendForbiddenResponseToClientSocket = (clientSocket) => {
-  clientSocket.write(
-    'HTTP/1.1 403 Forbidden\r\n' +
-    'Content-Type: text/plain\r\n' +
-    '\r\n403 Forbidden: Access is restricted to allowed subnet'
-  );
-  clientSocket.destroy();
-  log(`Blocked request from ${getSocketIp(clientSocket)}`, 'warning');
-};
-
-const sendBadRequestResponseToClientSocket = (clientSocket) => {
-  clientSocket.write(
-    'HTTP/1.1 400 Bad Request\r\n' +
-    'Content-Type: text/plain\r\n' +
-    '\r\n400 Bad Request: Invalid target URL'
-  );
-  clientSocket.destroy();
-}
-
-
-// http error handlers
-const sendForbiddenResponse = (res, clientIp) => {
-  res.writeHead(403, { 'Content-Type': 'text/plain' });
-  res.end('403 Forbidden: Access is restricted to allowed subnet');
-  log(`Blocked request from ${clientIp}`, 'warning');
-};
-
-const sendBadGatewayResponse = (res, target) => {
-  res.writeHead(502);
-  res.end('Bad Gateway');
-  log(`Bad gateway: ${target}`, 'warning');
-};
-
-const sendBadRequestResponse = (res, message) => {
-  res.writeHead(400, { 'Content-Type': 'text/plain' });
-  res.end(`400 Bad Request: ${message}`);
-};
 
 // http proxy request handler
 const handleHttpRequest = (req, res) => {
@@ -53,14 +15,17 @@ const handleHttpRequest = (req, res) => {
   if (!isAllowedSource(clientIp, CONFIG.ALLOWED_SUBNET)) {
     return sendForbiddenResponse(res, clientIp);
   }
-  log(`New HTTP request from ${clientIp} to ${req.url}`);
-  // 从请求头中获取主机信息
+
+  // 构建完整的 URL
   const host = req.headers.host;
+  const fullUrl = `http://${host}${req.url}`;
+  log(`New HTTP request from ${clientIp} to ${fullUrl}`);
+
   if (!host) {
+    log('Host header is missing', 'warning');
     return sendBadRequestResponse(res, 'Host header is missing');
   }
-  // 构建完整的 URL
-  const fullUrl = `http://${host}${req.url}`;
+
   // 解析请求 URL
   if (URL.canParse(fullUrl)) {
     req.headers['x-forwarded-for'] = clientIp; // 传递原始客户端IP
@@ -72,6 +37,7 @@ const handleHttpRequest = (req, res) => {
       sendBadGatewayResponse(res, target);
     });
   } else {
+    log(`Invalid URL: ${fullUrl}`, 'warning');
     return sendBadRequestResponse(res, 'Invalid URL');
   }
 };
@@ -81,6 +47,7 @@ const handleHttpsRequest = (req, clientSocket, head) => {
   // 过滤不在允许范围内的请求
   const clientIp = getSocketIp(clientSocket);
   if (!isAllowedSource(clientIp, CONFIG.ALLOWED_SUBNET)) {
+    log(`Blocked request from ${clientIp}`, 'warning');
     return sendForbiddenResponseToClientSocket(clientSocket);
   }
   log(`New HTTPS request from ${clientIp} to ${req.url}`);

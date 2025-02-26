@@ -1,7 +1,7 @@
 // utils.js
 import child_process from 'child_process';
 import { isIPv6 } from 'net';
-import CONFIG from './constant.js';
+import { CONFIG } from './constant.js';
 
 // 创建统一的日志函数
 const log = (message, level = 'info') => {
@@ -95,6 +95,7 @@ const getSocketIp = (socket, req = null) => {
     return req.headers['x-forwarded-for'].split(',')[0].trim();
   }
   if (!socket || !socket.remoteAddress) {
+    log('Failed to get remote address from socket, returning 0.0.0.0', 'error');
     return '0.0.0.0'; // 默认返回值
   }
   return socket.remoteAddress.replace(/^::ffff:/, ''); // 兼容IPv4-mapped地址
