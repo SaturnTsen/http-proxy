@@ -27,8 +27,8 @@ const log = (message, level = 'info') => {
 // URL parser
 const ipToInt = (ip) => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
 const isValidIP = (ip) => /^(\d{1,3}\.){3}\d{1,3}$/.test(ip) && ip.split('.').every(octet => parseInt(octet) <= 255);
-const isAllowedSource = (ip) => {
-  const [subnetBase, subnetMask] = CONFIG.ALLOWED_SUBNET.split('/');
+const isAllowedSource = (ip, allowed_subnet) => {
+  const [subnetBase, subnetMask] = allowed_subnet.split('/');
   const subnetMaskInt = parseInt(subnetMask, 10);
   if (!isValidIP(ip) || !isValidIP(subnetBase)) {
     throw new Error('Invalid IP address or subnet.');
@@ -72,7 +72,7 @@ const parseRequestUrl = (requestUrl) => {
     }
   }
 
-  return { hostname, port };
+  return [hostname, port];
 };
 
 const isValidUrl = (hostname, port) => {
@@ -89,9 +89,15 @@ const isValidUrl = (hostname, port) => {
   return true;
 };
 
-const getSocketIp = (socket) => {
-  if (!socket || !socket.remoteAddress) return '';
-  return socket.remoteAddress.replace(/^::ffff:/, ''); // 处理 IPv6 地址
+const getSocketIp = (socket, req = null) => {
+  // 优先从X-Forwarded-For取第一个地址
+  if (req?.headers['x-forwarded-for']) {
+    return req.headers['x-forwarded-for'].split(',')[0].trim();
+  }
+  if (!socket || !socket.remoteAddress) {
+    return '0.0.0.0'; // 默认返回值
+  }
+  return socket.remoteAddress.replace(/^::ffff:/, ''); // 兼容IPv4-mapped地址
 };
 
 // VPN Connection
