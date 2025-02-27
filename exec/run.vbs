@@ -2,9 +2,9 @@ Set WshShell = CreateObject("WScript.Shell")
 Set objWMIService = GetObject("winmgmts:\\.\root\cimv2")
 
 ' 设置工作目录
-WshShell.CurrentDirectory = "Z:\SharedFiles\http-proxy"
+WshShell.CurrentDirectory = WshShell.CurrentDirectory & "\.."
 ' 运行 .bat 文件，隐藏窗口
-WshShell.Run "Z:\SharedFiles\http-proxy\exec\pm2.bat", 0, False
+WshShell.Run WshShell.CurrentDirectory & "\exec\pm2.bat", 0, False
 
 ' 等待 5 秒
 WScript.Sleep 8000

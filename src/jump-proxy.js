@@ -1,41 +1,37 @@
 import http from 'http';
 import httpProxy from 'http-proxy';
 import net from 'net';
-import { JUMPSERVER_CONFIG } from './constant.js';
-import { getSocketIp, isAllowedSource, log } from './utils.js';
+import { JUMPSERVER_CONFIG } from '../constant.js';
+import { getSocketIp, isAllowedSource, logger } from './utils.js';
 import { sendBadGatewayResponse, sendBadRequestResponse, sendBadRequestResponseToClientSocket, sendForbiddenResponseToClientSocket } from './error-handlers.js';
-// 创建代理实例
-const proxy = httpProxy.createProxyServer({});
 
-const server = http.createServer((req, res) => {
-    // 真实客户端IP提取（兼容IPv6映射格式）
-    const clientIp = req.socket.remoteAddress.replace(/^::ffff:/, '');
+const log = logger(JUMPSERVER_CONFIG.VERBOSE);
 
-    // Phase 1: 前置安全验证
-    if (!isAllowedSource(clientIp, JUMPSERVER_CONFIG.ALLOWED_SUBNET)) {
-        return sendBadRequestResponse(res, 'Access is restricted to allowed subnet');
+const handleRequest = (proxy) => {
+    return (req, res) => {
+        // 真实客户端IP提取（兼容IPv6映射格式）
+        const clientIp = req.socket.remoteAddress.replace(/^::ffff:/, '');
+
+        // Phase 1: 前置安全验证
+        if (!isAllowedSource(clientIp, JUMPSERVER_CONFIG.ALLOWED_SUBNET)) {
+            return sendBadRequestResponse(res, 'Access is restricted to allowed subnet');
+        }
+        log(`New HTTP request from ${clientIp} to ${req.url}`, 'info');
+        // Phase 2: 构建可信X-Forwarded-For链
+        const existingXff = req.headers['x-forwarded-for'] || '';
+        req.headers['x-forwarded-for'] = existingXff
+            ? `${existingXff}, ${clientIp}`
+            : clientIp;
+
+        // Phase 3: 流量中转（带有透明错误处理）
+        const proxyTarget = `http://${JUMPSERVER_CONFIG.TARGET_PROXY.host}:${JUMPSERVER_CONFIG.TARGET_PROXY.port}`;
+        proxy.web(req, res, { target: proxyTarget });
     }
-    log(`New HTTP request from ${clientIp} to ${req.url}`, 'info');
-    // Phase 2: 构建可信X-Forwarded-For链
-    const existingXff = req.headers['x-forwarded-for'] || '';
-    req.headers['x-forwarded-for'] = existingXff
-        ? `${existingXff}, ${clientIp}`
-        : clientIp;
-
-    // Phase 3: 流量中转（带有透明错误处理）
-    const proxyTarget = `http://${JUMPSERVER_CONFIG.TARGET_PROXY.host}:${JUMPSERVER_CONFIG.TARGET_PROXY.port}`;
-    proxy.web(req, res, { target: proxyTarget });
-});
-
-// 集中式代理错误处理（替代分散的回调）
-proxy.on('error', (err, req, res) => {
-    log(`HTTP Proxy Error: ${err.message}`, 'error');
-    sendBadGatewayResponse(res, req.url);
-});
+};
 
 // 处理CONNECT方法 (HTTPS隧道)
 // 跳板代理的CONNECT处理修改版
-server.on('connect', (req, clientSocket) => {
+const handleConnect = (req, clientSocket) => {
 
     const clientIp = getSocketIp(clientSocket);
     if (!isAllowedSource(clientIp, JUMPSERVER_CONFIG.ALLOWED_SUBNET)) {
@@ -84,9 +80,23 @@ server.on('connect', (req, clientSocket) => {
         log(`Client Error: ${e.message}`, 'error')
         proxySocket.end()
     })
-})
+}
 
-server.listen(JUMPSERVER_CONFIG.LISTEN_PORT, JUMPSERVER_CONFIG.LISTEN_IP, () => {
-    log(`Proxy bridge running on http://${JUMPSERVER_CONFIG.LISTEN_IP}:${JUMPSERVER_CONFIG.LISTEN_PORT}`, 'proxy');
+const main = () => {
+    if (JUMPSERVER_CONFIG.VERBOSE) {
+        log('Verbose mode enabled.', 'info');
+    }
+    log('Jump Proxy is running...', 'info');
     log(`Allowed subnet: ${JUMPSERVER_CONFIG.ALLOWED_SUBNET}`, 'proxy');
-});
+    let proxy = httpProxy.createProxyServer({});
+    let server = http.createServer(handleRequest(proxy));
+    proxy.on('error', (err, req, res) => {
+        log(`HTTP Proxy Error: ${err.message}`, 'error');
+        sendBadGatewayResponse(res, req.url);
+    });
+    server.on('connect', handleConnect);
+    log(`Jump Proxy listening on ${JUMPSERVER_CONFIG.LISTEN_IP}:${JUMPSERVER_CONFIG.LISTEN_PORT}`, 'proxy');
+    server.listen(JUMPSERVER_CONFIG.LISTEN_PORT, JUMPSERVER_CONFIG.LISTEN_IP);
+};
+
+main();

@@ -3,10 +3,10 @@
     "dependencies": {
         "http-proxy": "^1.18.1"
     },
+    "main": "src/proxy.js",
     "scripts": {
-        "start": "node src/proxy.js",
+        "serve": "node src/proxy.js",
         "serve:jump-proxy": "node src/jump-proxy.js",
-        "disconnect": "node -e \"require('./src/utils').disconnectVPN().then(console.log).catch(console.error)\"",
         "clear": "node src/clear.js"
     },
     "author": {

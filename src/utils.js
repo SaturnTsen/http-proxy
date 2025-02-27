@@ -1,28 +1,27 @@
 // utils.js
 import child_process from 'child_process';
 import { isIPv6 } from 'net';
-import { CONFIG } from './constant.js';
+import { CONFIG } from '../constant.js';
 
 // 创建统一的日志函数
-const log = (message, level = 'info') => {
-  const timestamp = new Date().toISOString().split('.')[0]; // 精确到秒
-  if (level === 'proxy') {
-    console.log(`[${timestamp}] [Proxy] ${message}`);
-  } else if (level === 'info') {
-    if (CONFIG.VERBOSE) {
-      console.log(`[${timestamp}] [Info] ${message}`);
-    }
-  } else if (level === 'warning') {
-    console.warn(`[${timestamp}] [Warning] ${message}`);
-  } else if (level === 'error') {
-    console.error(`[${timestamp}] [Error] ${message}`);
-  } else if (level === 'debug') {
-    if (CONFIG.DEBUG) {
-      console.debug(`[${timestamp}] [Debug] ${message}`);
+const logger = (VERBOSE) => {
+  return (message, level = 'info') => {
+    const timestamp = new Date().toISOString().split('.')[0]; // 精确到秒
+    if (level === 'proxy') {
+      console.log(`[${timestamp}] [Proxy] ${message}`);
+    } else if (level === 'info') {
+      if (VERBOSE) {
+        console.log(`[${timestamp}] [Info] ${message}`);
+      }
+    } else if (level === 'warning') {
+      console.warn(`[${timestamp}] [Warning] ${message}`);
+    } else if (level === 'error') {
+      console.error(`[${timestamp}] [Error] ${message}`);
     }
   }
 };
 
+const log = logger(CONFIG.VERBOSE);
 
 // URL parser
 const ipToInt = (ip) => ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0);
@@ -181,4 +180,4 @@ const disconnectVPN = () => {
   });
 };
 
-export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, isValidUrl, getSocketIp, log };
+export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, isValidUrl, getSocketIp, logger };

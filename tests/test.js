@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { checkVPNConnection, connectVPN, disconnectVPN } from './utils.js';
+import { checkVPNConnection, connectVPN, disconnectVPN } from '../src/utils.js';
 
 // 测试 checkVPNConnection 函数
 function testCheckVPNConnection() {

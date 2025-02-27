@@ -6,6 +6,8 @@ echo Starting the proxy server...
 
 :: This script should be run from the root of the project instead of the exec
 :: folder
-npm run start %*
+
+cd /d:%~dp0..
+npm run serve
 
 pause

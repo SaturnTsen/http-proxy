@@ -1,7 +1,11 @@
 Write-Host "Starting the proxy server..."
 
 # Run the proxy.js script using npm
-# This script should be run from the root of the project
-npm run start $args
+
+# Change directory to the parent directory of the current script
+Set-Location -Path (Get-Item -Path $PSScriptRoot).Parent.FullName
+
+# Run the proxy.js script using npm
+npm run serve
 
 Read-Host -Prompt "Press Enter to exit"
