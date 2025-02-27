@@ -72,61 +72,13 @@ Some shortcuts are provided in `exec` folder to start the proxy server.
 
 ## Start the Proxy Server
 
-### Starting the Proxy Server
-
 To start the proxy server, run the following command in your terminal:
 
 ```bash
-npm start
+npm run serve
 ```
 
-#### Auto Disconnect VPN on Exit
-
-If you want the VPN to automatically disconnect when you stop the proxy server
-(e.g., by pressing `Ctrl+C`), you can add the `--auto-disconnect` flag:
-
-```bash
-npm start -- --auto-disconnect
-```
-
-#### Disable Verbose Mode
-
-If you want to disable verbose logging for the proxy server, you can add the `--disable-verbose` flag when starting the server.
-
-```bash
-npm start -- --disable-verbose
-```
-
-#### Disconnect VPN
-
-If you only want to disconnect the VPN without starting the proxy server, you
-can run:
-
-```bash
-npm run disconnect
-```
-
-#### Notes:
-1. `npm start` will launch the proxy server and check if the VPN is connected.
-   If the VPN is not connected, the system will automatically attempt to connect
-   to it.
-2. If the `--auto-disconnect` flag is provided, the system will disconnect the
-   VPN automatically when you stop the proxy server (e.g., when sending the
-   `SIGINT` signal or pressing `Ctrl+C`).
-
-## Host Machine Configuration
-
-Set up the host machine to use the virtual machine's proxy:
-
-1. Configure the proxy settings in your application or operating system:
-   - **Proxy IP**: `192.168.22.135` (replace with your virtual machine's IP
-     address)
-   - **Proxy Port**: `1080`
-
-2. Test the proxy by `curl -x http://192.168.22.135:1080 https://ipv4.ddnspod.com`
-
-
-### Optional: Jump Proxy Server
+## Optional: Jump Proxy Server
 
 If you want to route shared network traffic through the host machine, you can
 run the jump proxy server on the host machine.
@@ -149,14 +101,8 @@ npm install -g pm2
 Start and save the proxy server process:
 
 ```bash
-pm2 start proxy.js --name "proxy-server"
+pm2 start ecosystem.config.cjs
 pm2 save
-```
-
-To enable auto-start on Windows:
-
-```bash
-pm2 startup
 ```
 
 Follow the instructions provided by PM2.
