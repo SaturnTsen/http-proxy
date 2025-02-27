@@ -3,8 +3,21 @@ import http from 'http';
 import net from 'net';
 import httpProxy from 'http-proxy';
 import { CONFIG } from '../constant.js';
-import { ensureVPNConnection, disconnectVPN, parseRequestUrl, logger, isValidUrl, getSocketIp, isAllowedSource } from './utils.js';
-import { sendForbiddenResponseToClientSocket, sendBadRequestResponseToClientSocket, sendForbiddenResponse, sendBadGatewayResponse, sendBadRequestResponse } from './error-handlers.js';
+import {
+  ensureVPNConnection,
+  disconnectVPN,
+  parseRequestUrl,
+  logger,
+  getSocketIp,
+  isAllowedSource
+} from './utils.js';
+import {
+  sendForbiddenResponseToClientSocket,
+  sendBadGatewayResponseToClientSocket,
+  sendForbiddenResponse,
+  sendBadGatewayResponse,
+  sendBadRequestResponse
+} from './error-handlers.js';
 
 const log = logger(CONFIG.VERBOSE);
 
@@ -13,19 +26,18 @@ const handleHttpRequest = (proxy) => {
   return (req, res) => {
     // 过滤不在允许范围内的请求
     const clientIp = getSocketIp(req.socket);
-    if (!isAllowedSource(clientIp, CONFIG.ALLOWED_SUBNET)) {
-      return sendForbiddenResponse(res, clientIp);
-    }
-    // 构建完整的 URL
     const host = req.headers.host;
     const fullUrl = `http://${host}${req.url}`;
     log(`New HTTP request from ${clientIp} to ${fullUrl}`);
-
+    if (!isAllowedSource(clientIp, CONFIG.ALLOWED_SUBNET)) {
+      log(`Blocked request from ${clientIp}`, 'warning');
+      return sendForbiddenResponse(res, clientIp);
+    }
+    // 构建完整的 URL
     if (!host) {
       log('Host header is missing', 'warning');
       return sendBadRequestResponse(res, 'Host header is missing');
     }
-
     // 解析请求 URL
     if (URL.canParse(fullUrl)) {
       req.headers['x-forwarded-for'] = clientIp; // 传递原始客户端IP
@@ -47,17 +59,13 @@ const handleHttpRequest = (proxy) => {
 const handleHttpsRequest = (req, clientSocket, head) => {
   // 过滤不在允许范围内的请求
   const clientIp = getSocketIp(clientSocket);
+  log(`New HTTPS request from ${clientIp} to ${req.url}`);
   if (!isAllowedSource(clientIp, CONFIG.ALLOWED_SUBNET)) {
     log(`Blocked request from ${clientIp}`, 'warning');
     return sendForbiddenResponseToClientSocket(clientSocket);
   }
-  log(`New HTTPS request from ${clientIp} to ${req.url}`);
   // 解析请求 URL
   const [hostname, port = 443] = parseRequestUrl(req.url);
-  if (!isValidUrl(hostname, port || 443)) {
-    log(`Invalid target URL - hostname: ${hostname}, port:${port || 443}`);
-    return sendBadRequestResponseToClientSocket(clientSocket);
-  }
   // 连接到目标服务器
   const serverSocket = net.connect(port || 443, hostname, () => {
     clientSocket.write(
@@ -83,7 +91,7 @@ const handleHttpsRequest = (req, clientSocket, head) => {
     } else {
       log(`Server socket error: ${err.message}`, 'warning');
     }
-    clientSocket.end();
+    serverSocket.end();
   });
   // 捕获错误，防止崩溃
   clientSocket.on('error', (err) => {
@@ -94,6 +102,8 @@ const handleHttpsRequest = (req, clientSocket, head) => {
     } else {
       log(`Client socket error: ${err.message}`, 'warning');
     }
+    sendBadGatewayResponseToClientSocket(clientSocket, `${hostname}:${port}`);
+    clientSocket.end();
   });
   serverSocket.setTimeout(CONFIG.SOCKET_TIMEOUT, () => {
     log(`Connection to server ${getSocketIp(serverSocket)} timed out.`, 'info');

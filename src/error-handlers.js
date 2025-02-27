@@ -17,16 +17,24 @@ const sendBadRequestResponseToClientSocket = (clientSocket) => {
     clientSocket.destroy();
 }
 
+const sendBadGatewayResponseToClientSocket = (clientSocket, target) => {
+    clientSocket.write(
+        'HTTP/1.1 502 Bad Gateway\r\n' +
+        'Content-Type: text/plain\r\n' +
+        '\r\n502 Bad Gateway: ' + target + ' is unreachable'
+    );
+    clientSocket.destroy();
+}
 
 // http error handlers
 const sendForbiddenResponse = (res, clientIp) => {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
-    res.end('403 Forbidden: Access is restricted to allowed subnet');
+    res.end(`403 Forbidden: Access by ${clientIp} is restricted to allowed subnet`);
 };
 
 const sendBadGatewayResponse = (res, target) => {
     res.writeHead(502);
-    res.end('Bad Gateway');
+    res.end(`502 Bad Gateway: ${target.origin} is unreachable`);
 };
 
 const sendBadRequestResponse = (res, message) => {
@@ -34,4 +42,11 @@ const sendBadRequestResponse = (res, message) => {
     res.end(`400 Bad Request: ${message}`);
 };
 
-export { sendForbiddenResponseToClientSocket, sendBadRequestResponseToClientSocket, sendForbiddenResponse, sendBadGatewayResponse, sendBadRequestResponse };
+export {
+    sendForbiddenResponseToClientSocket,
+    sendBadRequestResponseToClientSocket,
+    sendBadGatewayResponseToClientSocket,
+    sendForbiddenResponse,
+    sendBadGatewayResponse,
+    sendBadRequestResponse
+};

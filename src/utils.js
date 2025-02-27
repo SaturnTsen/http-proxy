@@ -95,6 +95,10 @@ const getSocketIp = (socket, req = null) => {
   }
   if (!socket || !socket.remoteAddress) {
     log('Failed to get remote address from socket, returning 0.0.0.0', 'error');
+    // 添加traceback
+    // TODO 优化错误处理
+    const stack = new Error().stack;
+    log(`Traceback: ${stack}`, 'debug');
     return '0.0.0.0'; // 默认返回值
   }
   return socket.remoteAddress.replace(/^::ffff:/, ''); // 兼容IPv4-mapped地址
@@ -180,4 +184,12 @@ const disconnectVPN = () => {
   });
 };
 
-export { ensureVPNConnection, disconnectVPN, isAllowedSource, parseRequestUrl, isValidUrl, getSocketIp, logger };
+export {
+  ensureVPNConnection,
+  disconnectVPN,
+  isAllowedSource,
+  parseRequestUrl,
+  isValidUrl,
+  getSocketIp,
+  logger
+};
