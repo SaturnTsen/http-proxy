@@ -3,42 +3,63 @@ import httpProxy from 'http-proxy';
 import net from 'net';
 import { JUMPSERVER_CONFIG } from '../constant.js';
 import {
-    getSocketIp,
+    getClientSocketIp,
     isAllowedSource,
     logger,
     parseRequestUrl
 } from './utils.js';
 import {
     sendBadGatewayResponse,
-    sendBadRequestResponse,
+    sendForbiddenResponse,
     sendBadRequestResponseToClientSocket,
-    sendForbiddenResponseToClientSocket
+    sendForbiddenResponseToClientSocket,
+    sendBadGatewayResponseToClientSocket
 } from './error-handlers.js';
 const log = logger(JUMPSERVER_CONFIG.VERBOSE);
 
 const handleRequest = (proxy) => {
     return (req, res) => {
-        // 真实客户端IP提取（兼容IPv6映射格式）
-        const clientIp = getSocketIp(req.socket);
+    // 真实客户端IP提取（兼容IPv6映射格式）
+        const clientIp = getClientSocketIp(req.socket);
         log(`New HTTP request from ${clientIp} to ${req.url}`, 'info');
         // Phase 1: 前置安全验证
         if (!isAllowedSource(clientIp, JUMPSERVER_CONFIG.ALLOWED_SUBNET)) {
-            return sendBadRequestResponse(res, 'Access is restricted to allowed subnet');
+            return sendForbiddenResponse(res, 'Access is restricted to allowed subnet');
         }
-        // Phase 2: 构建可信X-Forwarded-For链
-        const existingXff = req.headers['x-forwarded-for'] || '';
-        req.headers['x-forwarded-for'] = existingXff
-            ? `${existingXff}, ${clientIp}`
-            : clientIp;
-        // Phase 3: 流量中转（带有透明错误处理）
-        const proxyTarget = `http://${JUMPSERVER_CONFIG.TARGET_PROXY.host}:${JUMPSERVER_CONFIG.TARGET_PROXY.port}`;
-        proxy.web(req, res, { target: proxyTarget });
+        try {
+            // Phase 2: 构建可信X-Forwarded-For链
+            const existingXff = req.headers['x-forwarded-for'] || '';
+            req.headers['x-forwarded-for'] = existingXff
+                ? `${existingXff}, ${clientIp}`
+                : clientIp;
+            // Via头需要符合RFC 2616规范 (格式: 1.1 hostname)
+            const viaIdentifier = 'jump-proxy';
+            req.headers['via'] = req.headers['via']
+                ? `${req.headers['via']}, 1.1 ${viaIdentifier}`
+                : `1.1 ${viaIdentifier}`;
+            // Phase 3: 流量中转（带有透明错误处理）
+            const proxyTarget = `http://${JUMPSERVER_CONFIG.TARGET_PROXY.host}:${JUMPSERVER_CONFIG.TARGET_PROXY.port}`;
+            proxy.on('error', (err, req, res) => {
+                log(`HTTP Proxy Error: ${err}`, 'info');
+                sendBadGatewayResponse(res, req.url);
+            });
+            proxy.web(req, res, { target: proxyTarget, headers: req.headers })
+        } catch (err) {
+            log(`Error: ${err}`, 'error');
+            sendBadGatewayResponse(res, req.url);
+        }
     }
 };
 
 // 处理CONNECT方法 (HTTPS隧道)
+// listener: (req: http.IncomingMessage, socket: internal.Duplex, head: Buffer)
+/**
+ * Handles HTTPS CONNECT requests.
+ * @param {http.IncomingMessage} req - The incoming HTTP request.
+ * @param {net.Socket} clientSocket - The client socket.
+ */
 const handleConnect = (req, clientSocket) => {
-    const clientIp = getSocketIp(clientSocket);
+    const clientIp = getClientSocketIp(clientSocket);
     if (!isAllowedSource(clientIp, JUMPSERVER_CONFIG.ALLOWED_SUBNET)) {
         return sendForbiddenResponseToClientSocket(clientSocket);
     }
@@ -61,6 +82,7 @@ const handleConnect = (req, clientSocket) => {
                 const response = data.toString()
                 if (!response.startsWith('HTTP/1.1 200')) { // 判断代理是否成功建立
                     sendBadGatewayResponse(clientSocket, targetHost)
+                    log(`Failed to establish tunnel to ${targetHost}`, 'error')
                     proxySocket.destroy()
                     return clientSocket.destroy()
                 }
@@ -72,15 +94,37 @@ const handleConnect = (req, clientSocket) => {
         }
     )
     // [统一的错误处理]
-    proxySocket.on('error', (e) => {
-        log(`Proxy Error: ${e.message}`, 'error')
-        clientSocket.end()
-    })
-
-    clientSocket.on('error', (e) => {
-        log(`Client Error: ${e.message}`, 'error')
-        proxySocket.end()
-    })
+    // 设置超时和错误处理
+    proxySocket.on('error', (err) => {
+        if (err.code === 'ECONNABORTED') {
+            log(`Connection aborted by server ${targetHost}:${targetPort}`, 'info');
+        } else if (err.code === 'ETIMEDOUT') {
+            log(`Connection to server ${targetHost}:${targetPort} timed out.`, 'info');
+        } else if (err.code === 'ECONNRESET') {
+            log(`Connection reset by server ${targetHost}:${targetPort}`, 'info');
+        } else if (err.code === 'ENETUNREACH') {
+            log(`Network is unreachable to server ${targetHost}:${targetPort}`, 'info');
+        } else {
+            log(`Unclassified Server socket error: ${err.message}`, 'warning');
+        }
+        proxySocket.end();
+    });
+    // 捕获错误，防止崩溃
+    clientSocket.on('error', (err) => {
+        if (err.code === 'ECONNRESET') {
+            log(`Connection reset by client ${clientIp}`, 'info');
+        } else if (err.code === 'ECONNABORTED') {
+            log(`Connection aborted by client ${clientIp}`, 'info');
+        } else {
+            log(`Unclassified Client socket error: ${err}`, 'warning');
+        }
+        sendBadGatewayResponseToClientSocket(clientSocket, `${targetHost}:${targetPort}`);
+        clientSocket.end();
+    });
+    proxySocket.setTimeout(JUMPSERVER_CONFIG.SOCKET_TIMEOUT, () => {
+        log(`Connection to server ${targetHost}:${targetPort} timed out.`, 'info');
+        clientSocket.end();
+    });
 }
 
 const main = () => {
@@ -92,10 +136,6 @@ const main = () => {
     let server = http.createServer();
     let proxy = httpProxy.createProxyServer({});
     server.on('request', handleRequest(proxy));
-    proxy.on('error', (err, req, res) => {
-        log(`HTTP Proxy Error: ${err.message}`, 'error');
-        sendBadGatewayResponse(res, req.url);
-    });
     server.on('connect', handleConnect);
     log(`Jump Proxy listening on ${JUMPSERVER_CONFIG.LISTEN_IP}:${JUMPSERVER_CONFIG.LISTEN_PORT}`, 'proxy');
     server.listen(JUMPSERVER_CONFIG.LISTEN_PORT, JUMPSERVER_CONFIG.LISTEN_IP);
