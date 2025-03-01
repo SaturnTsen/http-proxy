@@ -114,7 +114,9 @@ const checkVPNConnection = () => {
             command = 'ifconfig | grep tun0';
         }
 
-        child_process.exec(command, (error, stdout, stderr) => {
+        child_process.exec(command, {
+            windowsHide: true
+        }, (error, stdout, stderr) => {
             if (process.platform === 'win32') {
                 resolve(stdout.startsWith('No connections') ? 'VPN is not connected.' : 'VPN is connected.');
             } else {
@@ -137,9 +139,11 @@ const connectVPN = () => {
             command = CONFIG.VPN_COMMAND;
         }
 
-        child_process.exec(command, (error, stdout, stderr) => {
+        child_process.exec(command, {
+            windowsHide: true
+        }, (error, stdout, stderr) => {
             if (error || stderr) {
-                reject('Failed to connect VPN.');
+                resolve('Failed to connect VPN.');
             } else {
                 resolve('VPN connected successfully.');
             }

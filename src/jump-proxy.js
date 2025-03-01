@@ -19,7 +19,7 @@ const log = logger(JUMPSERVER_CONFIG.VERBOSE);
 
 const handleRequest = (proxy) => {
     return (req, res) => {
-    // 真实客户端IP提取（兼容IPv6映射格式）
+        // 真实客户端IP提取（兼容IPv6映射格式）
         const clientIp = getClientSocketIp(req.socket);
         log(`New HTTP request from ${clientIp} to ${req.url}`, 'info');
         // Phase 1: 前置安全验证
@@ -127,7 +127,7 @@ const handleConnect = (req, clientSocket) => {
     });
 }
 
-const main = () => {
+const main = async () => {
     if (JUMPSERVER_CONFIG.VERBOSE) {
         log('Verbose mode enabled.', 'info');
     }
@@ -137,8 +137,8 @@ const main = () => {
     let proxy = httpProxy.createProxyServer({});
     server.on('request', handleRequest(proxy));
     server.on('connect', handleConnect);
-    log(`Jump Proxy listening on ${JUMPSERVER_CONFIG.LISTEN_IP}:${JUMPSERVER_CONFIG.LISTEN_PORT}`, 'proxy');
     server.listen(JUMPSERVER_CONFIG.LISTEN_PORT, JUMPSERVER_CONFIG.LISTEN_IP);
+    log(`Jump Proxy listening on ${JUMPSERVER_CONFIG.LISTEN_IP}:${JUMPSERVER_CONFIG.LISTEN_PORT}`, 'proxy');
 };
 
 main();
