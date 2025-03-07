@@ -1,0 +1,19 @@
+{
+    "cSpell.words": [
+        "autorestart",
+        "Eduroam",
+        "Epoc",
+        "jumpboard",
+        "JUMPSERVER",
+        "ovpn",
+        "pkill",
+        "rasdial",
+        "SJTU",
+        "taskkill"
+    ],
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+    "[javascript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
+    }
+}
